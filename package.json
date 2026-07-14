@@ -1,0 +1,21 @@
+{
+  "name": "crash-it",
+  "version": "1.0.0",
+  "description": "2-player physics car battle — land on their head, don't get wet",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/sim-test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "matter-js": "^0.20.0",
+    "poly-decomp": "^0.3.0",
+    "puppeteer-core": "^25.3.0",
+    "ws": "^8.21.0"
+  }
+}

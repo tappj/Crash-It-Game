@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Crash It</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- main menu -->
+  <div id="menu" class="screen">
+    <h1 class="title">CRASH<span> IT</span></h1>
+    <p class="tagline">Land on their head. Don’t get wet.</p>
+    <button id="btnLocal" class="big">🎮 &nbsp;Local 2 Player</button>
+    <button id="btnCreate" class="big">🌐 &nbsp;Create Online Lobby</button>
+    <button id="btnJoin" class="big">🔑 &nbsp;Join Lobby</button>
+    <p class="hint">
+      Red: <b>A / D</b> &nbsp;·&nbsp; Blue: <b>← / →</b> &nbsp;·&nbsp; or use the on-screen buttons.<br/>
+      Knock the other car on its head, throw it off the map, or let the water take it. First to 5 wins!
+    </p>
+  </div>
+
+  <!-- join lobby -->
+  <div id="joinScreen" class="screen hidden">
+    <h2>Join a lobby</h2>
+    <input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" />
+    <button id="btnJoinGo" class="big">Join</button>
+    <button id="btnJoinBack" class="small">Back</button>
+  </div>
+
+  <!-- waiting in lobby -->
+  <div id="lobbyScreen" class="screen hidden">
+    <h2>Lobby created!</h2>
+    <p class="lobbyHint">Share this code with your opponent:</p>
+    <div id="lobbyCode">····</div>
+    <p class="lobbyHint">Waiting for them to join…<span class="dots"></span></p>
+    <button id="btnLobbyCancel" class="small">Cancel</button>
+  </div>
+
+  <!-- game over -->
+  <div id="overScreen" class="screen hidden">
+    <h1 id="overTitle">RED WINS!</h1>
+    <div id="overScore">0 · 0</div>
+    <p id="overSub"></p>
+    <button id="btnRematch" class="big">🔁 &nbsp;Rematch</button>
+    <button id="btnOverMenu" class="small">Menu</button>
+  </div>
+
+  <button id="hudExit" class="hidden">EXIT</button>
+  <div id="toast" class="hidden"></div>
+  <div id="rotateHint">Rotate your device sideways to play 📱↻</div>
+
+  <script src="decomp.min.js"></script>
+  <script src="matter.min.js"></script>
+  <script src="js/maps.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
