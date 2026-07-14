@@ -1,27 +1,36 @@
 // Crash It — canvas renderer. Draws entirely from a plain state snapshot,
 // so it works identically for the local sim (host) and network replicas (guest).
+//
+// Performance: the static map base (background, specks, sky window, skyline,
+// grounds, blocks, arcs) is rasterized ONCE per map into an offscreen canvas
+// and blitted each frame; only cars, planks, particles, water and HUD are
+// redrawn live.
 (function () {
   const { W, H, MAPS } = CrashMaps;
 
   const COLORS = {
-    bg: '#3d434a',          // solid terrain charcoal (fills everything outside the sky window)
-    bgDeco: 'rgba(0,0,0,0.16)',
-    rain: 'rgba(255,255,255,0.05)',
-    sky: '#f3bcb6',         // the pink sky visible through the window
-    outline: '#15181b',
-    skyline: ['#ab8dab', '#9a7d9e', '#b697b2'],
-    skylineWin: 'rgba(255,255,255,0.22)',
-    cream: '#f6e8cf',
-    plank: '#7c4b31',
-    plankEdge: '#5d3623',
-    pivot: '#38231a',
-    waterTop: '#2196e8',
-    water: '#1a7fd4',
-    waterDeep: '#1a4fa8',
-    p1: '#e8433f', p1d: '#b02c2c',
-    p2: '#35b6e0', p2d: '#1f81ab',
+    bg: '#3f4851',          // solid terrain slate (fills everything outside the sky window)
+    speck: 'rgba(0,0,0,0.18)',
+    sky: '#ffc3be',         // the pink sky visible through the window
+    outline: '#000000',
+    skyline: ['#cc97a6', '#c095a5', '#b28ba0', '#ae8698'],
+    cream: '#ffe3c9',
+    plank: '#aa5942',
+    pivot: '#404952',
+    waterTop: '#0086ec',
+    waterDeep: '#005ba3',
+    stripe: '#ffbc3f',
+    stripeEdge: '#ea842b',
+    p1: '#ff5f57', p1d: '#c71417',
+    p2: '#00c3f0', p2d: '#0074b5',
     skin: '#f7c9a2',
   };
+
+  // per-player car/button palettes (sampled from the original art)
+  const CARS = [
+    { main: '#ff5f57', low: '#9e3a35', wheel: '#cb1616', hub: '#7e1010', dim: '#d96964' },
+    { main: '#00c3f0', low: '#00748e', wheel: '#0081c3', hub: '#00587e', dim: '#009fc2' },
+  ];
 
   // ---------- deterministic decor ----------
   function mulberry32(a) {
@@ -54,42 +63,45 @@
     ctx.closePath();
   }
 
-  // pixel-city skyline pattern, clipped inside an island shape
+  // flat pastel city skyline clipped inside an island shape — two layers of
+  // buildings with darker vertical slit windows, occasional cream accent block
   function drawSkyline(ctx, verts, seed) {
     const b = bounds(verts);
     const rnd = mulberry32(seed);
     ctx.save();
     smoothPath(ctx, verts);
     ctx.clip();
-    // building masses rising from the bottom of the shape
-    let x = b.x0 - 20;
-    let ci = 0;
-    while (x < b.x1 + 20) {
-      const bw = 70 + rnd() * 130;
-      const bh = (b.y1 - b.y0) * (0.25 + rnd() * 0.55);
-      const by = b.y1 + 30 - bh;
-      ctx.fillStyle = COLORS.skyline[ci++ % COLORS.skyline.length];
-      ctx.globalAlpha = 0.55 + rnd() * 0.3;
-      ctx.fillRect(x, by, bw, bh + 40);
-      // window dashes
-      ctx.fillStyle = COLORS.skylineWin;
-      for (let wy = by + 16; wy < b.y1; wy += 26) {
-        for (let wx = x + 10; wx < x + bw - 18; wx += 30) {
-          if (rnd() < 0.55) ctx.fillRect(wx, wy, 16, 7);
+    // back row: tall, lighter; front row: shorter, darker — sparse enough
+    // that plenty of pink sky stays visible above the roofline
+    const rows = [
+      { hMin: 0.35, hMax: 0.72, cols: ['#cc97a6', '#c095a5'] },
+      { hMin: 0.18, hMax: 0.45, cols: ['#b28ba0', '#ae8698'] },
+    ];
+    for (const row of rows) {
+      let x = b.x0 - 30, ci = 0;
+      while (x < b.x1 + 30) {
+        const bw = 90 + rnd() * 150;
+        const bh = (b.y1 - b.y0) * (row.hMin + rnd() * (row.hMax - row.hMin));
+        const by = b.y1 + 40 - bh;
+        ctx.fillStyle = rnd() < 0.1 ? COLORS.cream : row.cols[ci++ % row.cols.length];
+        ctx.fillRect(x, by, bw, bh + 40);
+        // darker slit windows in vertical columns
+        ctx.fillStyle = 'rgba(60,20,40,0.10)';
+        for (let wx = x + 18; wx < x + bw - 26; wx += 42) {
+          let wy = by + 18 + rnd() * 34;
+          while (wy < b.y1 - 26) {
+            const wh = 34 + rnd() * 70;
+            if (rnd() < 0.7) ctx.fillRect(wx, wy, 13, wh);
+            wy += wh + 20;
+          }
         }
+        x += bw + 14 + rnd() * 60;
       }
-      if (rnd() < 0.18) { // cream accent building
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = COLORS.cream;
-        ctx.fillRect(x + bw * 0.2, by + bh * 0.3, bw * 0.35, bh);
-      }
-      x += bw + 8;
     }
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
-  // scattered dark rounded bars (drifting cloud specks) — used on the charcoal
+  // scattered dark rounded bars (drifting cloud specks) — used on the slate
   // background and inside ground masses
   function drawSpecks(ctx, seed, x0, y0, x1, y1, count, alpha) {
     const rnd = mulberry32(seed);
@@ -124,8 +136,8 @@
   // or a full pink sky with dark ground masses floating in it
   function drawMapBase(ctx, map, seed) {
     if (map.sky.kind === 'window') {
-      // charcoal terrain fills the screen (already painted as bg) + specks
-      drawSpecks(ctx, seed * 31 + 5, -100, 0, W + 100, H, 22, 0.14);
+      // slate terrain fills the screen (already painted as bg) + specks
+      drawSpecks(ctx, seed * 31 + 5, -300, -100, W + 300, H + 100, 26, 0.16);
       smoothPath(ctx, map.sky.verts);
       ctx.fillStyle = COLORS.sky;
       ctx.fill();
@@ -137,10 +149,9 @@
     } else {
       // open sky: pink everywhere, city skyline rising from the horizon
       ctx.fillStyle = COLORS.sky;
-      ctx.fillRect(-100, -100, W + 200, H + 200);
-      const frame = [{ x: -100, y: 60 }, { x: W + 100, y: 60 }, { x: W + 100, y: H }, { x: -100, y: H }];
+      ctx.fillRect(-300, -100, W + 600, H + 200);
+      const frame = [{ x: -300, y: 60 }, { x: W + 300, y: 60 }, { x: W + 300, y: H }, { x: -300, y: H }];
       drawSkyline(ctx, frame, seed * 17 + 3);
-      drawSpecks(ctx, seed * 31 + 5, -100, 0, W + 100, H * 0.55, 12, 0.10);
     }
     for (const g of map.grounds) drawGround(ctx, g.verts, seed * 13 + 7);
     for (const b of map.blocks) {
@@ -167,18 +178,21 @@
   }
 
   // ---------- cars ----------
-  function drawCar(ctx, c, colors, shieldOn) {
-    // wheels behind body — dark tire, player-colored hub (like the original)
+  function drawCar(ctx, c, pal, shieldOn) {
+    const d = c.dir >= 0 ? 1 : -1;
+    // wheels behind body — black tire, bright colored ring, dark hub
     for (const w of c.wheels) {
       ctx.save();
       ctx.translate(w.x, w.y);
       ctx.rotate(w.a);
-      ctx.fillStyle = '#26292d';
-      ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = colors.dark;
-      ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#26292d';
-      ctx.fillRect(-8, -2.5, 16, 5); // hub mark so spin is visible
+      ctx.fillStyle = '#0d0f14';
+      ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pal.wheel;
+      ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0d0f14';
+      ctx.fillRect(-10, -2.5, 20, 5); // hub mark so spin is visible
+      ctx.fillStyle = pal.hub;
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     ctx.save();
@@ -186,41 +200,85 @@
     ctx.rotate(c.a);
     // body offset: compound center of mass sits slightly above chassis center
     const bodyY = 4;
-    // chassis
-    ctx.fillStyle = colors.main;
-    ctx.beginPath();
-    ctx.roundRect(-46, bodyY - 15, 92, 30, 10);
-    ctx.fill();
-    // hood highlight + stripe
-    ctx.fillStyle = colors.dark;
-    ctx.beginPath();
-    ctx.roundRect(-46, bodyY + 2, 92, 13, { bl: 10, br: 10, tl: 2, tr: 2 });
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.beginPath();
-    ctx.roundRect(c.dir >= 0 ? 20 : -34, bodyY - 11, 14, 6, 3);
-    ctx.fill();
-    // driver head
     const hx = 0, hy = bodyY - 35;
+
+    // driver behind windshield (under the body outline)
+    if (c.alive) {
+      // helmet — player color with black outline + grey visor at the front
+      ctx.fillStyle = pal.main;
+      ctx.strokeStyle = COLORS.outline;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(hx, hy, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(hx, hy, 13, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = '#7f6f78';
+      ctx.beginPath();
+      ctx.ellipse(hx + d * 10, hy + 2, 4.5, 6.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      // visor shine
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(hx - d * 4, hy - 6, 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // raised cockpit cowl connecting the driver to the body
+    ctx.fillStyle = pal.main;
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(d > 0 ? -30 : -14, bodyY - 27, 44, 20, 8);
+    ctx.fill(); ctx.stroke();
+
+    // exhaust nub at the back
+    ctx.fillStyle = '#2e343b';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(-d * 46 - (d > 0 ? 8 : 0), bodyY - 6, 8, 10, 3);
+    ctx.fill(); ctx.stroke();
+    // headlight nub at the front
+    ctx.fillStyle = COLORS.stripe;
+    ctx.beginPath();
+    ctx.roundRect(d * 46 - (d > 0 ? 0 : 7), bodyY - 8, 7, 12, 3);
+    ctx.fill(); ctx.stroke();
+
+    // chassis — main color, yellow stripe, darker rocker panel, black outline
+    ctx.beginPath();
+    ctx.roundRect(-46, bodyY - 15, 92, 30, 12);
+    ctx.fillStyle = pal.main;
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = pal.low;
+    ctx.fillRect(-46, bodyY + 8, 92, 10);
+    ctx.fillStyle = COLORS.stripe;
+    ctx.fillRect(-46, bodyY + 1, 92, 7);
+    ctx.fillStyle = COLORS.stripeEdge;
+    ctx.fillRect(-46, bodyY + 6, 92, 2.5);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.roundRect(-46, bodyY - 15, 92, 30, 12);
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 4.5;
+    ctx.stroke();
+
+    // windshield — small white bar in front of the driver
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(d * 17 - 3, bodyY - 34, 6, 19, 3);
+    ctx.fill(); ctx.stroke();
+
+    // dead marker
     if (!c.alive) {
-      ctx.strokeStyle = '#222';
+      ctx.strokeStyle = '#111';
       ctx.lineWidth = 5;
       const s = 10;
       ctx.beginPath();
       ctx.moveTo(hx - s, hy - s); ctx.lineTo(hx + s, hy + s);
       ctx.moveTo(hx + s, hy - s); ctx.lineTo(hx - s, hy + s);
       ctx.stroke();
-    } else {
-      ctx.fillStyle = COLORS.skin;
-      ctx.beginPath(); ctx.arc(hx, hy, 13, 0, Math.PI * 2); ctx.fill();
-      // helmet
-      ctx.fillStyle = colors.main;
-      ctx.beginPath(); ctx.arc(hx, hy, 15, Math.PI * 0.95, Math.PI * 2.05); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.beginPath(); ctx.arc(hx, hy - 4, 4, 0, Math.PI * 2); ctx.fill();
-      // eye
-      ctx.fillStyle = '#222';
-      ctx.beginPath(); ctx.arc(hx + (c.dir >= 0 ? 6 : -6), hy + 3, 2.6, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
 
@@ -272,10 +330,10 @@
       for (const p of this.list) {
         ctx.globalAlpha = Math.max(0, p.life) * 0.85;
         if (p.kind === 'smoke') {
-          ctx.fillStyle = '#e8e2dc';
+          ctx.fillStyle = '#8a8580';
           ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
         } else if (p.kind === 'drop') {
-          ctx.fillStyle = '#9fd4f7';
+          ctx.fillStyle = '#5eb1f5';
           ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
         } else {
           ctx.save();
@@ -300,12 +358,6 @@
     ctx.fill();
   }
 
-  // ---------- rain ----------
-  const rain = [];
-  for (let i = 0; i < 46; i++) {
-    rain.push({ x: Math.random() * W, y: Math.random() * H, len: 40 + Math.random() * 70, sp: 0.35 + Math.random() * 0.5 });
-  }
-
   // ---------- touch button layout (shared with input.js) ----------
   function buttonLayout() {
     const r = 62, m = 26, y = H - r - m;
@@ -320,7 +372,7 @@
   class Renderer {
     constructor(canvas) {
       this.canvas = canvas;
-      this.ctx = canvas.getContext('2d');
+      this.ctx = canvas.getContext('2d', { alpha: false });
       this.particles = new Particles();
       this.lastEventId = 0;
       this.lastMid = null;
@@ -328,6 +380,9 @@
       this.pressed = {};  // button visual feedback, set by input
       this.showButtons = true;
       this.localPlayers = [0, 1];
+      // offscreen cache of the static map base — rebuilt on map change / resize
+      this.base = document.createElement('canvas');
+      this.baseMap = -1;
       this.resize();
       window.addEventListener('resize', () => this.resize());
     }
@@ -342,12 +397,28 @@
       this.scale = s;
       this.offX = (this.canvas.width - W * s) / 2;
       this.offY = (this.canvas.height - H * s) / 2;
+      this.baseMap = -1; // invalidate the static-base cache
     }
 
     // map a client (CSS px) point into world coordinates — used by input.js
     toWorld(cx, cy) {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       return { x: (cx * dpr - this.offX) / this.scale, y: (cy * dpr - this.offY) / this.scale };
+    }
+
+    // rasterize the static map base once; per-frame drawing just blits it
+    ensureBase(mapIdx) {
+      if (this.baseMap === mapIdx &&
+          this.base.width === this.canvas.width &&
+          this.base.height === this.canvas.height) return;
+      this.base.width = this.canvas.width;
+      this.base.height = this.canvas.height;
+      const b = this.base.getContext('2d', { alpha: false });
+      b.fillStyle = COLORS.bg;
+      b.fillRect(0, 0, this.base.width, this.base.height);
+      b.setTransform(this.scale, 0, 0, this.scale, this.offX, this.offY);
+      drawMapBase(b, MAPS[mapIdx], mapIdx + 1);
+      this.baseMap = mapIdx;
     }
 
     processEvents(state) {
@@ -372,25 +443,13 @@
       this.particles.step();
       if (this.banner) { this.banner.t -= dt; if (this.banner.t <= 0) this.banner = null; }
 
+      // static map base from the offscreen cache
+      this.ensureBase(state.map);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#23272c';
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.drawImage(this.base, 0, 0);
       ctx.setTransform(this.scale, 0, 0, this.scale, this.offX, this.offY);
 
-      // background + rain
-      ctx.fillStyle = COLORS.bg;
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = COLORS.rain;
-      for (const d of rain) {
-        d.y += d.sp * 16;
-        if (d.y > H + 80) { d.y = -100; d.x = Math.random() * W; }
-        ctx.beginPath();
-        ctx.roundRect(d.x, d.y, 9, d.len, 5);
-        ctx.fill();
-      }
-
       const map = MAPS[state.map];
-      drawMapBase(ctx, map, state.map + 1);
 
       // planks
       state.planks.forEach((p, i) => {
@@ -403,11 +462,11 @@
         ctx.beginPath();
         ctx.roundRect(-def.w / 2, -def.h / 2, def.w, def.h, def.h / 2);
         ctx.fill();
-        ctx.strokeStyle = COLORS.plankEdge;
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = COLORS.outline;
+        ctx.lineWidth = 6;
         ctx.stroke();
         ctx.fillStyle = COLORS.pivot;
-        ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       });
 
@@ -417,7 +476,7 @@
           const back = c.wheels[c.drive > 0 ? 0 : 1];
           if (back) this.particles.smoke(back.x, back.y);
         }
-        drawCar(ctx, c, i === 0 ? { main: COLORS.p1, dark: COLORS.p1d } : { main: COLORS.p2, dark: COLORS.p2d }, state.shield > 0 && state.phase !== 'over');
+        drawCar(ctx, c, CARS[i], state.shield > 0 && state.phase !== 'over');
       });
 
       this.particles.draw(ctx);
@@ -439,39 +498,26 @@
       }
     }
 
+    // two-tone water: bright blue wavy band over a deeper navy layer
     drawWater(ctx, level) {
       const t = performance.now() / 1000;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(-200, H + 200);
-      ctx.lineTo(-200, level);
-      for (let x = -200; x <= W + 200; x += 14) {
-        const y = level + Math.sin(x / 46 + t * 2.2) * 5 + Math.sin(x / 21 - t * 3.1) * 3;
-        ctx.lineTo(x, y);
-      }
-      ctx.lineTo(W + 200, H + 200);
-      ctx.closePath();
-      ctx.fillStyle = COLORS.water;
-      ctx.globalAlpha = 0.96;
-      ctx.fill();
-      ctx.clip();
-      // lighter crest band
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = COLORS.waterTop;
-      ctx.fillRect(-200, level - 10, W + 400, 26);
-      // deep band + drifting dashes
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = COLORS.waterDeep;
-      ctx.fillRect(-200, Math.max(level + 90, H - 60), W + 400, 300);
-      ctx.fillStyle = 'rgba(255,255,255,0.10)';
-      for (let i = 0; i < 14; i++) {
-        const x = ((i * 260 + t * 40) % (W + 400)) - 200;
-        const y = level + 34 + (i % 4) * 26;
+      const layers = [
+        { y: level, color: COLORS.waterTop, phase: 0 },
+        { y: level + 24, color: COLORS.waterDeep, phase: 2.1 },
+      ];
+      for (const l of layers) {
         ctx.beginPath();
-        ctx.roundRect(x, y, 46, 8, 4);
+        ctx.moveTo(-300, H + 200);
+        ctx.lineTo(-300, l.y);
+        for (let x = -300; x <= W + 300; x += 16) {
+          const y = l.y + Math.sin(x / 34 + t * 1.6 + l.phase) * 6 + Math.sin(x / 61 - t * 2.2 + l.phase) * 4;
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(W + 300, H + 200);
+        ctx.closePath();
+        ctx.fillStyle = l.color;
         ctx.fill();
       }
-      ctx.restore();
     }
 
     drawHUD(ctx, state) {
@@ -506,30 +552,28 @@
         ctx.fillText(this.banner.text, W / 2, 170);
       }
 
-      // touch buttons
+      // touch buttons — thick black ring, colored disc (bright when pressed,
+      // dimmed otherwise), chunky black chevron
       if (this.showButtons) {
         for (const b of buttonLayout()) {
           if (!this.localPlayers.includes(b.player)) continue;
-          const col = b.player === 0 ? COLORS.p1 : COLORS.p2;
+          const pal = CARS[b.player];
           const pressed = this.pressed[b.player + b.side];
-          ctx.globalAlpha = pressed ? 1 : 0.9;
-          // solid colored disc with a fat black rim + chevron (like the original)
-          ctx.fillStyle = '#101215';
+          ctx.fillStyle = '#000000';
           ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = pressed ? '#fff' : col;
-          ctx.beginPath(); ctx.arc(b.x, b.y, b.r - 9, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = pressed ? pal.main : pal.dim;
+          ctx.beginPath(); ctx.arc(b.x, b.y, b.r - 10, 0, Math.PI * 2); ctx.fill();
           // chevron
-          ctx.strokeStyle = '#101215';
-          ctx.lineWidth = 14;
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 16;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          const d = b.dirIcon, s = 17;
+          const d = b.dirIcon, s = 18;
           ctx.beginPath();
           ctx.moveTo(b.x - d * s * 0.5, b.y - s);
           ctx.lineTo(b.x + d * s * 0.7, b.y);
           ctx.lineTo(b.x - d * s * 0.5, b.y + s);
           ctx.stroke();
-          ctx.globalAlpha = 1;
         }
       }
     }

@@ -3,7 +3,7 @@
 html, body {
   width: 100%; height: 100%;
   overflow: hidden;
-  background: #23272c;
+  background: #3f4851;
   font-family: "Arial Rounded MT Bold", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   touch-action: none;
   user-select: none;
@@ -28,11 +28,11 @@ html, body {
 
 .title {
   font-size: clamp(52px, 10vw, 96px);
-  color: #f3bcb6;
+  color: #ffc3be;
   letter-spacing: 4px;
   text-shadow: 0 6px 0 rgba(0,0,0,0.35);
 }
-.title span { color: #35b6e0; }
+.title span { color: #00c3f0; }
 
 .tagline { color: #cfd6dd; font-size: 18px; margin-bottom: 14px; }
 
@@ -52,10 +52,10 @@ button.big {
   padding: 16px 42px;
   min-width: 320px;
   color: #fff;
-  background: #e8433f;
-  box-shadow: 0 5px 0 #a12b28;
+  background: #ff5f57;
+  box-shadow: 0 5px 0 #c71417;
 }
-button.big:nth-of-type(2) { background: #35b6e0; box-shadow: 0 5px 0 #20789c; }
+button.big:nth-of-type(2) { background: #00c3f0; box-shadow: 0 5px 0 #0074b5; }
 button.big:nth-of-type(3) { background: #8f7396; box-shadow: 0 5px 0 #5f4a66; }
 
 button.small {
@@ -78,7 +78,7 @@ button.small {
   text-transform: uppercase;
   color: #fff;
   background: #14171a;
-  border: 3px solid #35b6e0;
+  border: 3px solid #00c3f0;
   border-radius: 18px;
   padding: 12px 6px 12px 18px;
   outline: none;
@@ -95,24 +95,28 @@ button.small {
 .lobbyHint { color: #cfd6dd; font-size: 18px; }
 
 #overTitle { font-size: clamp(48px, 9vw, 84px); text-shadow: 0 5px 0 rgba(0,0,0,0.35); }
-#overTitle.red, .red { color: #e8433f; }
-#overTitle.blue, .blue { color: #35b6e0; }
+#overTitle.red, .red { color: #ff5f57; }
+#overTitle.blue, .blue { color: #00c3f0; }
 #overScore { font-size: 46px; color: #fff; }
 #overSub { color: #cfd6dd; font-size: 20px; }
 
-/* white bubble half-sunk into the water at the bottom center, like the original */
+/* white circle half-sunk into the water at the bottom center, like the original */
 #hudExit {
   position: fixed;
-  bottom: -26px; left: 50%;
+  bottom: -64px; left: 50%;
   transform: translateX(-50%);
   z-index: 5;
-  font-size: 16px;
+  width: 130px; height: 130px;
+  border-radius: 50%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 24px;
+  font-size: 19px;
+  font-weight: bold;
   letter-spacing: 1px;
-  padding: 14px 30px 34px;
-  color: #444;
-  background: rgba(255,255,255,0.95);
-  border-radius: 999px;
-  box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+  color: #2b2b2b;
+  background: #ffffff;
 }
 
 #toast {
@@ -138,8 +142,8 @@ button.small {
   display: none;
   position: fixed; inset: 0;
   z-index: 30;
-  background: #23272c;
-  color: #f3bcb6;
+  background: #3f4851;
+  color: #ffc3be;
   font-size: 24px;
   text-align: center;
   align-items: center;
