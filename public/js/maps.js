@@ -63,20 +63,6 @@
     return verts;
   }
 
-  // puffy cloud ceiling from (x0,y0) over the top and down to (x1,y0)
-  function cloudTop(x0, x1, y0, ry, puffs = 3, phase = 0.6) {
-    const cx = (x0 + x1) / 2, rx = (x1 - x0) / 2;
-    const pts = [];
-    const n = 16;
-    for (let i = 0; i <= n; i++) {
-      const th = Math.PI - (i / n) * Math.PI; // left → right over the top
-      const s = Math.sin(th);
-      const puff = 1 + 0.12 * Math.abs(Math.sin(puffs * th + phase)) * s;
-      pts.push({ x: cx + rx * Math.cos(th), y: y0 - ry * s * puff });
-    }
-    return pts;
-  }
-
   // open arc polyline (half-pipe bowls): θ in radians, y-down screen coords
   function arcPts(cx, cy, r, a0, a1, n = 22) {
     const pts = [];
@@ -92,48 +78,48 @@
   // ---- the 13 maps (maps/map1.png … map13.png) ---------------------------
 
   const MAPS = [
-    // 1 — wide cloud pocket, one horizontal seesaw floating mid-air
+    // 1 — asymmetric open-topped pocket, one horizontal seesaw
     M({
       name: 'Cloud Plank',
       sky: {
         kind: 'window',
         verts: pocket(
-          [{ x: 210, y: 470 }, { x: 320, y: 545 }, { x: 520, y: 600 }, { x: 800, y: 622 },
-           { x: 1080, y: 600 }, { x: 1280, y: 545 }, { x: 1390, y: 470 }],
-          cloudTop(210, 1390, 470, 430, 3, 0.7)),
+          [{ x: 120, y: 410 }, { x: 280, y: 478 }, { x: 450, y: 535 }, { x: 650, y: 566 },
+           { x: 820, y: 575 }, { x: 1010, y: 554 }, { x: 1190, y: 505 }, { x: 1400, y: 400 }],
+          [{ x: 120, y: 410 }, { x: 70, y: 300 }, { x: 145, y: 190 }, { x: 310, y: 132 },
+           { x: 430, y: 150 }, { x: 515, y: -35 }, { x: 1080, y: -35 }, { x: 1175, y: 122 },
+           { x: 1305, y: 122 }, { x: 1480, y: 245 }, { x: 1400, y: 400 }]),
       },
       planks: [{ x: 800, y: 330, w: 460, h: 42, angle: 0 }],
       spawns: [{ x: 500, y: 540, dir: 1 }, { x: 1100, y: 540, dir: -1 }],
     }),
 
-    // 2 — smaller cloud pocket, flat floor with a fighting divot in the middle
+    // 2 — compact pinched bean pocket
     M({
       name: 'The Divot',
       sky: {
         kind: 'window',
         verts: pocket(
-          [{ x: 300, y: 480 }, { x: 430, y: 520 }, { x: 600, y: 528 }, { x: 700, y: 535 },
-           { x: 760, y: 558 }, { x: 800, y: 566 }, { x: 840, y: 558 }, { x: 900, y: 535 },
-           { x: 1000, y: 528 }, { x: 1170, y: 520 }, { x: 1300, y: 480 }],
-          cloudTop(300, 1300, 480, 420, 4, 1.9)),
+          [{ x: 250, y: 452 }, { x: 350, y: 524 }, { x: 560, y: 558 }, { x: 720, y: 535 },
+           { x: 800, y: 580 }, { x: 880, y: 535 }, { x: 1040, y: 558 }, { x: 1250, y: 524 }, { x: 1350, y: 452 }],
+          [{ x: 250, y: 452 }, { x: 310, y: 365 }, { x: 470, y: 300 }, { x: 670, y: 292 },
+           { x: 735, y: 236 }, { x: 800, y: 105 }, { x: 865, y: 236 }, { x: 930, y: 292 },
+           { x: 1130, y: 300 }, { x: 1290, y: 365 }, { x: 1350, y: 452 }]),
       },
       spawns: [{ x: 470, y: 500, dir: 1 }, { x: 1130, y: 500, dir: -1 }],
     }),
 
-    // 3 — huge valley reaching off the top of the screen, big seesaw in the air
+    // 3 — the reference's broad S-shaped asphalt shelf and center seesaw
     M({
       name: 'Grand Valley',
-      sky: {
-        kind: 'window',
-        verts: pocket(
-          [{ x: 120, y: 300 }, { x: 260, y: 330 }, { x: 420, y: 470 }, { x: 560, y: 620 },
-           { x: 700, y: 720 }, { x: 800, y: 745 }, { x: 900, y: 720 }, { x: 1040, y: 620 },
-           { x: 1180, y: 470 }, { x: 1340, y: 330 }, { x: 1480, y: 300 }],
-          [{ x: 120, y: 300 }, { x: 70, y: 150 }, { x: 160, y: 10 }, { x: 450, y: -40 },
-           { x: 800, y: -50 }, { x: 1150, y: -40 }, { x: 1440, y: 10 }, { x: 1530, y: 150 }, { x: 1480, y: 300 }]),
-      },
+      sky: { kind: 'open' },
+      grounds: [{ verts: curve([
+        { x: -80, y: 392 }, { x: 210, y: 372 }, { x: 390, y: 430 }, { x: 565, y: 555 },
+        { x: 760, y: 682 }, { x: 910, y: 640 }, { x: 1080, y: 508 }, { x: 1260, y: 374 },
+        { x: 1680, y: 382 }, { x: 1680, y: 1100 }, { x: -80, y: 1100 }, { x: -80, y: 392 },
+      ], 8) }],
       planks: [{ x: 800, y: 430, w: 560, h: 42, angle: 0 }],
-      spawns: [{ x: 630, y: 395, dir: 1 }, { x: 970, y: 395, dir: -1 }],
+      spawns: [{ x: 420, y: 390, dir: 1 }, { x: 1210, y: 340, dir: -1 }],
     }),
 
     // 4 — big capsule pocket, seesaw floating in the upper half
@@ -179,46 +165,36 @@
       spawns: [{ x: 620, y: 700, dir: 1 }, { x: 980, y: 700, dir: -1 }],
     }),
 
-    // 8 — open sky: two seesaws over a bumpy full-width ground, hanging corners
+    // 8 — long S-pocket with two independent seesaws
     M({
       name: 'Twin Seesaws',
-      sky: { kind: 'open' },
-      grounds: [
-        { verts: curve([
-            { x: -60, y: 620 }, { x: 200, y: 648 }, { x: 360, y: 612 }, { x: 520, y: 652 },
-            { x: 680, y: 618 }, { x: 800, y: 658 }, { x: 920, y: 618 }, { x: 1080, y: 652 },
-            { x: 1240, y: 612 }, { x: 1400, y: 648 }, { x: 1660, y: 620 },
-            { x: 1660, y: 1100 }, { x: -60, y: 1100 }, { x: -60, y: 620 },
-          ], 6) },
-        { verts: curve([
-            { x: -60, y: -80 }, { x: 300, y: -80 }, { x: 262, y: 55 }, { x: 160, y: 128 },
-            { x: 30, y: 148 }, { x: -60, y: 110 }, { x: -60, y: -80 },
-          ], 6) },
-        { verts: curve([
-            { x: 1660, y: -80 }, { x: 1300, y: -80 }, { x: 1338, y: 55 }, { x: 1440, y: 128 },
-            { x: 1570, y: 148 }, { x: 1660, y: 110 }, { x: 1660, y: -80 },
-          ], 6) },
-      ],
+      sky: { kind: 'window', verts: pocket(
+        [{ x: -80, y: 352 }, { x: 180, y: 470 }, { x: 355, y: 618 }, { x: 525, y: 686 },
+         { x: 700, y: 620 }, { x: 860, y: 486 }, { x: 1040, y: 396 }, { x: 1240, y: 432 },
+         { x: 1450, y: 590 }, { x: 1680, y: 646 }],
+        [{ x: -80, y: 352 }, { x: 140, y: 265 }, { x: 325, y: 120 }, { x: 510, y: 18 },
+         { x: 800, y: -42 }, { x: 1090, y: 18 }, { x: 1280, y: 135 }, { x: 1435, y: 270 },
+         { x: 1680, y: 646 }], 8) },
       planks: [
-        { x: 430, y: 390, w: 480, h: 42, angle: -0.08 },
-        { x: 1170, y: 390, w: 480, h: 42, angle: 0.08 },
+        { x: 470, y: 368, w: 430, h: 42, angle: 0, spring: 0.0007 },
+        { x: 1115, y: 350, w: 430, h: 42, angle: 0, spring: 0.0007 },
       ],
-      spawns: [{ x: 430, y: 350, dir: 1 }, { x: 1170, y: 350, dir: -1 }],
+      spawns: [{ x: 470, y: 320, dir: 1 }, { x: 1115, y: 302, dir: -1 }],
     }),
 
-    // 9 — two flat plateaus with a deep rounded gap (and a small mound) between
+    // 9 — opposing asphalt banks leave the narrow center brawl channel
     M({
       name: 'The Gap',
       sky: { kind: 'open' },
-      grounds: [{
-        verts: curve([
-          { x: -60, y: 445 }, { x: 240, y: 432 }, { x: 480, y: 442 }, { x: 580, y: 472 },
-          { x: 660, y: 565 }, { x: 725, y: 645 }, { x: 800, y: 602 }, { x: 875, y: 645 },
-          { x: 940, y: 565 }, { x: 1020, y: 472 }, { x: 1120, y: 442 }, { x: 1360, y: 432 },
-          { x: 1660, y: 445 }, { x: 1660, y: 1100 }, { x: -60, y: 1100 }, { x: -60, y: 445 },
-        ], 6),
-      }],
-      spawns: [{ x: 280, y: 390, dir: 1 }, { x: 1320, y: 390, dir: -1 }],
+      grounds: [
+        { verts: curve([{ x: -80, y: -80 }, { x: 1680, y: -80 }, { x: 1680, y: 194 },
+          { x: 1260, y: 186 }, { x: 1030, y: 202 }, { x: 930, y: 254 }, { x: 820, y: 245 },
+          { x: 690, y: 196 }, { x: 420, y: 198 }, { x: -80, y: 210 }, { x: -80, y: -80 }], 6) },
+        { verts: curve([{ x: -80, y: 682 }, { x: 330, y: 688 }, { x: 550, y: 664 }, { x: 690, y: 610 },
+          { x: 800, y: 596 }, { x: 910, y: 610 }, { x: 1050, y: 664 }, { x: 1270, y: 688 },
+          { x: 1680, y: 682 }, { x: 1680, y: 1100 }, { x: -80, y: 1100 }, { x: -80, y: 682 }], 6) },
+      ],
+      spawns: [{ x: 540, y: 620, dir: 1 }, { x: 1060, y: 620, dir: -1 }],
     }),
 
     // 10 — pinched bean pocket with a saddle floor and two floating blocks
@@ -237,19 +213,20 @@
       spawns: [{ x: 400, y: 555, dir: 1 }, { x: 1200, y: 555, dir: -1 }],
     }),
 
-    // 11 — one giant smooth brawl pit, everything rolls to the middle
+    // 11 — steep, lopsided S-pit from the reference set
     M({
       name: 'The Pit',
       sky: {
         kind: 'window',
         verts: pocket(
-          [{ x: 150, y: 380 }, { x: 295, y: 462 }, { x: 425, y: 578 }, { x: 555, y: 655 },
-           { x: 695, y: 712 }, { x: 800, y: 726 }, { x: 905, y: 712 }, { x: 1045, y: 655 },
-           { x: 1175, y: 578 }, { x: 1305, y: 462 }, { x: 1450, y: 380 }],
-          [{ x: 150, y: 380 }, { x: 90, y: 220 }, { x: 200, y: 55 }, { x: 500, y: -25 },
-           { x: 800, y: -35 }, { x: 1100, y: -25 }, { x: 1400, y: 55 }, { x: 1510, y: 220 }, { x: 1450, y: 380 }]),
+          [{ x: -80, y: 350 }, { x: 210, y: 410 }, { x: 410, y: 538 }, { x: 590, y: 638 },
+           { x: 770, y: 684 }, { x: 930, y: 650 }, { x: 1085, y: 540 }, { x: 1250, y: 405 },
+           { x: 1450, y: 360 }, { x: 1680, y: 390 }],
+          [{ x: -80, y: 350 }, { x: 180, y: 260 }, { x: 350, y: 105 }, { x: 570, y: 42 },
+           { x: 790, y: 120 }, { x: 930, y: 205 }, { x: 1110, y: 150 }, { x: 1280, y: 72 },
+           { x: 1500, y: 150 }, { x: 1680, y: 390 }]),
       },
-      spawns: [{ x: 430, y: 545, dir: 1 }, { x: 1170, y: 545, dir: -1 }],
+      spawns: [{ x: 430, y: 510, dir: 1 }, { x: 1170, y: 475, dir: -1 }],
     }),
 
     // 12 — wide oval pocket with a thick "smile" arc platform hanging mid-air

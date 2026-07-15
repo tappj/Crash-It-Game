@@ -63,41 +63,46 @@
     ctx.closePath();
   }
 
-  // flat pastel city skyline clipped inside an island shape — two layers of
-  // buildings with darker vertical slit windows, occasional cream accent block
-  function drawSkyline(ctx, verts, seed) {
-    const b = bounds(verts);
-    const rnd = mulberry32(seed);
+  // The reference uses one continuous, split-tone city plate behind every
+  // arena. Keeping it deterministic also lets the whole plate live in the
+  // static map cache instead of rebuilding random building geometry.
+  function drawCity(ctx, clipVerts) {
     ctx.save();
-    smoothPath(ctx, verts);
-    ctx.clip();
-    // back row: tall, lighter; front row: shorter, darker — sparse enough
-    // that plenty of pink sky stays visible above the roofline
-    const rows = [
-      { hMin: 0.35, hMax: 0.72, cols: ['#cc97a6', '#c095a5'] },
-      { hMin: 0.18, hMax: 0.45, cols: ['#b28ba0', '#ae8698'] },
+    if (clipVerts) {
+      smoothPath(ctx, clipVerts);
+      ctx.clip();
+    }
+
+    ctx.fillStyle = COLORS.sky;
+    ctx.fillRect(-300, -100, W + 600, H / 2 + 100);
+    ctx.fillStyle = '#b58fa5';
+    ctx.fillRect(-300, H / 2, W + 600, H / 2 + 200);
+
+    const buildings = [
+      [115, 238, 330, 300, '#cc97a6'], [292, 316, 410, 222, '#ca95a5'],
+      [454, 270, 352, 268, '#c28fa2'], [760, 196, 240, 342, '#c092a5'],
+      [950, 286, 236, 252, '#aa8398'], [1160, 246, 320, 292, '#b78da0'],
+      [96, 520, 350, 245, '#c28fa2'], [390, 474, 306, 291, '#bc8ca0'],
+      [670, 556, 244, 209, '#aa8298'], [876, 512, 278, 253, '#a77f96'],
+      [1112, 478, 348, 287, '#aa8298'],
     ];
-    for (const row of rows) {
-      let x = b.x0 - 30, ci = 0;
-      while (x < b.x1 + 30) {
-        const bw = 90 + rnd() * 150;
-        const bh = (b.y1 - b.y0) * (row.hMin + rnd() * (row.hMax - row.hMin));
-        const by = b.y1 + 40 - bh;
-        ctx.fillStyle = rnd() < 0.1 ? COLORS.cream : row.cols[ci++ % row.cols.length];
-        ctx.fillRect(x, by, bw, bh + 40);
-        // darker slit windows in vertical columns
-        ctx.fillStyle = 'rgba(60,20,40,0.10)';
-        for (let wx = x + 18; wx < x + bw - 26; wx += 42) {
-          let wy = by + 18 + rnd() * 34;
-          while (wy < b.y1 - 26) {
-            const wh = 34 + rnd() * 70;
-            if (rnd() < 0.7) ctx.fillRect(wx, wy, 13, wh);
-            wy += wh + 20;
-          }
+    for (const [x, y, w, h, color] of buildings) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(255,190,190,0.25)';
+      const cols = Math.max(2, Math.floor(w / 92));
+      const rows = Math.max(2, Math.floor(h / 70));
+      for (let yy = 0; yy < rows; yy++) {
+        for (let xx = 0; xx < cols; xx++) {
+          if ((xx + yy + Math.floor(x / 100)) % 4 !== 0)
+            ctx.fillRect(x + 28 + xx * 76, y + 28 + yy * 58, 48, 10);
         }
-        x += bw + 14 + rnd() * 60;
       }
     }
+    // Cream-colored negative-space blocks are a distinctive part of the art.
+    ctx.fillStyle = COLORS.cream;
+    ctx.fillRect(552, 392, 214, 58);
+    ctx.fillRect(704, 526, 174, 50);
     ctx.restore();
   }
 
@@ -139,19 +144,14 @@
       // slate terrain fills the screen (already painted as bg) + specks
       drawSpecks(ctx, seed * 31 + 5, -300, -100, W + 300, H + 100, 26, 0.16);
       smoothPath(ctx, map.sky.verts);
-      ctx.fillStyle = COLORS.sky;
-      ctx.fill();
-      drawSkyline(ctx, map.sky.verts, seed * 17 + 3);
+      drawCity(ctx, map.sky.verts);
       smoothPath(ctx, map.sky.verts);
       ctx.strokeStyle = COLORS.outline;
       ctx.lineWidth = 7;
       ctx.stroke();
     } else {
       // open sky: pink everywhere, city skyline rising from the horizon
-      ctx.fillStyle = COLORS.sky;
-      ctx.fillRect(-300, -100, W + 600, H + 200);
-      const frame = [{ x: -300, y: 60 }, { x: W + 300, y: 60 }, { x: W + 300, y: H }, { x: -300, y: H }];
-      drawSkyline(ctx, frame, seed * 17 + 3);
+      drawCity(ctx);
     }
     for (const g of map.grounds) drawGround(ctx, g.verts, seed * 13 + 7);
     for (const b of map.blocks) {
@@ -178,6 +178,19 @@
   }
 
   // ---------- cars ----------
+  function carBodyPath(ctx, d, y) {
+    const px = (x) => x * d;
+    ctx.beginPath();
+    ctx.moveTo(px(-46), y + 5);
+    ctx.quadraticCurveTo(px(-47), y - 11, px(-31), y - 15);
+    ctx.lineTo(px(29), y - 15);
+    ctx.quadraticCurveTo(px(45), y - 14, px(49), y - 2);
+    ctx.quadraticCurveTo(px(50), y + 11, px(33), y + 15);
+    ctx.lineTo(px(-32), y + 15);
+    ctx.quadraticCurveTo(px(-46), y + 15, px(-46), y + 5);
+    ctx.closePath();
+  }
+
   function drawCar(ctx, c, pal, shieldOn) {
     const d = c.dir >= 0 ? 1 : -1;
     // wheels behind body — black tire, bright colored ring, dark hub
@@ -188,11 +201,13 @@
       ctx.fillStyle = '#0d0f14';
       ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = pal.wheel;
-      ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#0d0f14';
-      ctx.fillRect(-10, -2.5, 20, 5); // hub mark so spin is visible
+      ctx.beginPath(); ctx.arc(0, 0, 12.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#11151a';
+      ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = pal.hub;
-      ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.beginPath(); ctx.arc(-1.5, -1.5, 1.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     ctx.save();
@@ -242,9 +257,9 @@
     ctx.roundRect(d * 46 - (d > 0 ? 0 : 7), bodyY - 8, 7, 12, 3);
     ctx.fill(); ctx.stroke();
 
-    // chassis — main color, yellow stripe, darker rocker panel, black outline
-    ctx.beginPath();
-    ctx.roundRect(-46, bodyY - 15, 92, 30, 12);
+    // Curved, directional chassis rather than a generic pill. The raised nose,
+    // colored rocker and narrow race stripe mirror the supplied car artwork.
+    carBodyPath(ctx, d, bodyY);
     ctx.fillStyle = pal.main;
     ctx.fill();
     ctx.save();
@@ -256,8 +271,7 @@
     ctx.fillStyle = COLORS.stripeEdge;
     ctx.fillRect(-46, bodyY + 6, 92, 2.5);
     ctx.restore();
-    ctx.beginPath();
-    ctx.roundRect(-46, bodyY - 15, 92, 30, 12);
+    carBodyPath(ctx, d, bodyY);
     ctx.strokeStyle = COLORS.outline;
     ctx.lineWidth = 4.5;
     ctx.stroke();
@@ -316,15 +330,19 @@
         this.list.push({ kind: 'drop', x, y, vx: (Math.random() - 0.5) * 7, vy: -3 - Math.random() * 5, r: 3 + Math.random() * 4, life: 1, decay: 0.02 });
       }
     }
-    step() {
-      for (const p of this.list) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.kind !== 'smoke') p.vy += 0.18;
-        else { p.r += 0.25; p.vx *= 0.98; }
-        p.life -= p.decay;
-        if (p.rot != null) p.rot += 0.15;
+    step(dt) {
+      const k = Math.min(2, Math.max(0.25, dt * 60));
+      let write = 0;
+      for (let i = 0; i < this.list.length; i++) {
+        const p = this.list[i];
+        p.x += p.vx * k; p.y += p.vy * k;
+        if (p.kind !== 'smoke') p.vy += 0.18 * k;
+        else { p.r += 0.25 * k; p.vx *= Math.pow(0.98, k); }
+        p.life -= p.decay * k;
+        if (p.rot != null) p.rot += 0.15 * k;
+        if (p.life > 0) this.list[write++] = p;
       }
-      this.list = this.list.filter((p) => p.life > 0);
+      this.list.length = write;
     }
     draw(ctx) {
       for (const p of this.list) {
@@ -372,7 +390,7 @@
   class Renderer {
     constructor(canvas) {
       this.canvas = canvas;
-      this.ctx = canvas.getContext('2d', { alpha: false });
+      this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
       this.particles = new Particles();
       this.lastEventId = 0;
       this.lastMid = null;
@@ -381,42 +399,50 @@
       this.showButtons = true;
       this.localPlayers = [0, 1];
       // offscreen cache of the static map base — rebuilt on map change / resize
-      this.base = document.createElement('canvas');
+      this.base = typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(W, H)
+        : document.createElement('canvas');
+      this.base.width = W;
+      this.base.height = H;
       this.baseMap = -1;
       this.resize();
-      window.addEventListener('resize', () => this.resize());
+      let resizeFrame = 0;
+      window.addEventListener('resize', () => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => this.resize());
+      }, { passive: true });
     }
 
     resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      this.canvas.width = window.innerWidth * dpr;
-      this.canvas.height = window.innerHeight * dpr;
+      const cssW = Math.max(1, window.innerWidth);
+      const cssH = Math.max(1, window.innerHeight);
+      // A hard pixel budget prevents high-DPI phones from copying 4–8 million
+      // pixels on every frame. The CSS-sized canvas is still smoothly scaled.
+      const budgetDpr = Math.sqrt(2200000 / (cssW * cssH));
+      const dpr = Math.max(0.75, Math.min(window.devicePixelRatio || 1, 2, budgetDpr));
+      this.pixelRatio = dpr;
+      this.canvas.width = Math.round(cssW * dpr);
+      this.canvas.height = Math.round(cssH * dpr);
       this.canvas.style.width = window.innerWidth + 'px';
       this.canvas.style.height = window.innerHeight + 'px';
       const s = Math.min(this.canvas.width / W, this.canvas.height / H);
       this.scale = s;
       this.offX = (this.canvas.width - W * s) / 2;
       this.offY = (this.canvas.height - H * s) / 2;
-      this.baseMap = -1; // invalidate the static-base cache
     }
 
     // map a client (CSS px) point into world coordinates — used by input.js
     toWorld(cx, cy) {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      return { x: (cx * dpr - this.offX) / this.scale, y: (cy * dpr - this.offY) / this.scale };
+      return { x: (cx * this.pixelRatio - this.offX) / this.scale, y: (cy * this.pixelRatio - this.offY) / this.scale };
     }
 
     // rasterize the static map base once; per-frame drawing just blits it
     ensureBase(mapIdx) {
-      if (this.baseMap === mapIdx &&
-          this.base.width === this.canvas.width &&
-          this.base.height === this.canvas.height) return;
-      this.base.width = this.canvas.width;
-      this.base.height = this.canvas.height;
+      if (this.baseMap === mapIdx) return;
       const b = this.base.getContext('2d', { alpha: false });
       b.fillStyle = COLORS.bg;
-      b.fillRect(0, 0, this.base.width, this.base.height);
-      b.setTransform(this.scale, 0, 0, this.scale, this.offX, this.offY);
+      b.fillRect(0, 0, W, H);
+      b.setTransform(1, 0, 0, 1, 0, 0);
       drawMapBase(b, MAPS[mapIdx], mapIdx + 1);
       this.baseMap = mapIdx;
     }
@@ -440,14 +466,16 @@
       const ctx = this.ctx;
       if (!state) return;
       this.processEvents(state);
-      this.particles.step();
+      this.particles.step(dt);
       if (this.banner) { this.banner.t -= dt; if (this.banner.t <= 0) this.banner = null; }
 
       // static map base from the offscreen cache
       this.ensureBase(state.map);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(this.base, 0, 0);
+      ctx.fillStyle = COLORS.bg;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       ctx.setTransform(this.scale, 0, 0, this.scale, this.offX, this.offY);
+      ctx.drawImage(this.base, 0, 0, W, H);
 
       const map = MAPS[state.map];
 
@@ -472,7 +500,7 @@
 
       // cars + exhaust
       state.cars.forEach((c, i) => {
-        if (c.drive !== 0 && c.alive && Math.random() < 0.5) {
+        if (c.drive !== 0 && c.alive && Math.random() < Math.min(1, dt * 28)) {
           const back = c.wheels[c.drive > 0 ? 0 : 1];
           if (back) this.particles.smoke(back.x, back.y);
         }

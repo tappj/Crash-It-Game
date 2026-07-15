@@ -217,6 +217,13 @@
   $('hudExit').onclick = () => backToMenu(true);
 
   show('menu');
+  // Do not feed a several-second delta into the fixed-step simulation after a
+  // phone app switch or background tab. Browsers stop painting hidden tabs,
+  // so resetting these clocks also avoids needless catch-up work on return.
+  document.addEventListener('visibilitychange', () => {
+    app.lastTime = performance.now();
+    app.acc = 0;
+  });
   requestAnimationFrame(frame);
   window.__crash = app; // debug/testing hook
 })();
