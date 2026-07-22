@@ -1,4 +1,7 @@
-# Keep the repository focused on the reorganized project directory.
-/*
-!/.gitignore
-!/crash-it/
+# Local reference assets that should not be versioned.
+maps/
+video references gameplay/
+image.png
+
+# Finder metadata.
+.DS_Store
