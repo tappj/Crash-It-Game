@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: crash-it-game
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start

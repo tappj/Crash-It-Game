@@ -104,6 +104,6 @@ const interval = setInterval(() => {
 }, 15000);
 wss.on('close', () => clearInterval(interval));
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Crash It running at http://localhost:${PORT}`);
 });
