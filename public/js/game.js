@@ -13,11 +13,13 @@
   if (decomp && Common.setDecomp) Common.setDecomp(decomp);
 
   const CFG = {
-    gravity: 1.35,
-    wheelAV: 0.66,        // target wheel spin (rad/step-ish)
-    wheelAccel: 0.045,
-    airSpin: 0.0042,      // button-held body spin assist
-    maxBodyAV: 0.28,
+    gravity: 1.42,
+    wheelAV: 0.76,        // target wheel spin (rad/step-ish)
+    wheelAccel: 0.038,
+    airWheelAccel: 0.024,
+    coastBrake: 0.28,
+    airSpin: 0.0065,      // button-held body spin assist while airborne
+    maxBodyAV: 0.36,
     shieldTime: 1.8,      // spawn protection seconds
     readyTime: 1.0,
     pointTime: 2.2,       // pause after a kill before next round
@@ -97,6 +99,11 @@
         this.planks.push(plank);
       }
 
+      // These are the only surfaces that can put a car "on the ground".
+      // Keeping this set before the cars are added avoids counting a car's
+      // own wheels/body as drive contact.
+      this.driveSurfaces = Composite.allBodies(this.engine.world);
+
       // cars — snap each spawn onto the surface below it so cars don't
       // drop-bounce or land on a slope shoulder
       const statics = Composite.allBodies(this.engine.world).filter((b) => b.isStatic || b.label === 'plank');
@@ -173,12 +180,12 @@
       const head = Bodies.circle(x, y - 31, 15, { density: 0.0008, label: 'head' + i });
       const body = Body.create({
         parts: [chassis, head],
-        collisionFilter: { group },
-        friction: 0.6, restitution: 0.12, label: 'car' + i,
+        collisionFilter: { group }, friction: 0.6, frictionAir: 0.008,
+        restitution: 0.16, label: 'car' + i,
       });
       const wheels = [-30, 30].map((ox) => Bodies.circle(x + ox, y + 16, 17, {
-        collisionFilter: { group }, friction: 1.35, frictionStatic: 4, restitution: 0.04,
-        density: 0.0022, label: 'wheel' + i,
+        collisionFilter: { group }, friction: 1.55, frictionStatic: 5.2,
+        frictionAir: 0.006, restitution: 0.07, density: 0.0022, label: 'wheel' + i,
       }));
       const axles = wheels.map((wheel) => Constraint.create({
         bodyA: body,
@@ -187,7 +194,10 @@
         length: 0, stiffness: 0.9, damping: 0.12,
       }));
       Composite.add(this.engine.world, [body, ...wheels, ...axles]);
-      return { body, head, wheels, dir, alive: true, input: { l: 0, r: 0 }, drive: 0, index: i };
+      return {
+        body, head, wheels, dir, alive: true, input: { l: 0, r: 0 },
+        drive: 0, grounded: false, index: i,
+      };
     }
 
     carOfPart(part) {
@@ -220,6 +230,12 @@
       return { x: car.head.position.x, y: car.head.position.y };
     }
 
+    isGrounded(car) {
+      // Querying two wheels against a small fixed surface list is cheap and
+      // keeps the driving model tied to actual terrain/plank contact.
+      return car.wheels.some((wheel) => Matter.Query.collides(wheel, this.driveSurfaces).length > 0);
+    }
+
     step(dt = 1 / 60) {
       this.phaseT += dt;
 
@@ -234,19 +250,29 @@
         for (const car of this.cars) {
           const d = car.alive ? (car.input.r ? 1 : 0) - (car.input.l ? 1 : 0) : 0;
           car.drive = d;
+          car.grounded = this.isGrounded(car);
           if (d === 0) {
-            // brake torque — overriding angular velocity directly fights the
-            // contact solver and ratchets the car downhill, so use torque
-            for (const wheel of car.wheels)
-              wheel.torque -= 0.9 * wheel.angularVelocity * wheel.inertia / 277.6;
+            // Let an airborne car keep its spin. Grounded wheels receive only
+            // a light rolling brake, preserving the long terrain launches in
+            // the reference instead of stopping dead on button release.
+            if (car.grounded) {
+              for (const wheel of car.wheels)
+                wheel.torque -= CFG.coastBrake * wheel.angularVelocity * wheel.inertia / 277.6;
+            }
           } else {
+            const accel = car.grounded ? CFG.wheelAccel : CFG.airWheelAccel;
             for (const wheel of car.wheels) {
               const target = d * CFG.wheelAV;
               const av = wheel.angularVelocity;
-              Body.setAngularVelocity(wheel, av + clamp(target - av, -CFG.wheelAccel, CFG.wheelAccel));
+              Body.setAngularVelocity(wheel, av + clamp(target - av, -accel, accel));
             }
-            Body.setAngularVelocity(car.body,
-              clamp(car.body.angularVelocity + d * CFG.airSpin, -CFG.maxBodyAV, CFG.maxBodyAV));
+            // Wheel traction creates movement on slopes and walls. Once both
+            // wheels leave a surface, the same control becomes a deliberate
+            // air-roll, matching the reference's controllable launch arcs.
+            if (!car.grounded) {
+              Body.setAngularVelocity(car.body,
+                clamp(car.body.angularVelocity + d * CFG.airSpin, -CFG.maxBodyAV, CFG.maxBodyAV));
+            }
           }
         }
       }

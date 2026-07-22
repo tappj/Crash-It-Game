@@ -40,7 +40,32 @@ for (let m = 0; m < MAPS.length; m++) {
   check('driving left reverses', x2 < x1 - 60, `dx=${(x2 - x1) | 0}`);
 }
 
-// 3. drop a car on the other's head -> kill + score
+// 3. airborne drive rotates the body but does not apply a ground brake
+{
+  const Matter = require('matter-js');
+  const match = new Match();
+  match.startRound(0);
+  match.phase = 'play';
+  match.shield = 0;
+  const car = match.cars[0];
+  Matter.Body.setPosition(car.body, { x: 800, y: 180 });
+  Matter.Body.setVelocity(car.body, { x: 0, y: 0 });
+  car.wheels.forEach((wheel, i) => {
+    Matter.Body.setPosition(wheel, { x: 770 + i * 60, y: 196 });
+    Matter.Body.setVelocity(wheel, { x: 0, y: 0 });
+    Matter.Body.setAngularVelocity(wheel, 0.5);
+  });
+  match.setInput(0, { l: 0, r: 1 });
+  match.step();
+  check('airborne drive applies rotational control', !car.grounded && car.body.angularVelocity > 0,
+    `grounded=${car.grounded} av=${car.body.angularVelocity.toFixed(3)}`);
+  match.setInput(0, { l: 0, r: 0 });
+  match.step();
+  check('airborne coasting preserves wheel momentum', car.wheels.every((wheel) => wheel.angularVelocity > 0.45),
+    car.wheels.map((wheel) => wheel.angularVelocity.toFixed(2)).join(', '));
+}
+
+// 4. drop a car on the other's head -> kill + score
 {
   const match = new Match();
   match.startRound(1); // the divot — flat pocket floor
@@ -65,7 +90,7 @@ for (let m = 0; m < MAPS.length; m++) {
   check('phase moved to point', ['point', 'ready', 'play'].includes(match.phase));
 }
 
-// 4. water rises after 60s and eventually kills both (draw -> no winner yet)
+// 5. water rises after 60s and eventually kills both (draw -> no winner yet)
 {
   const match = new Match();
   match.startRound(1); // the divot — cars idle safely in the pocket
@@ -77,7 +102,7 @@ for (let m = 0; m < MAPS.length; m++) {
   check('rising water ends the round', steps < 80 * 60, `extra=${(steps / 60) | 0}s water=${match.water | 0}`);
 }
 
-// 5. driving off an open island's edge drowns the car
+// 6. driving off an open island's edge drowns the car
 {
   const match = new Match();
   match.startRound(5); // asphalt isle
@@ -89,7 +114,7 @@ for (let m = 0; m < MAPS.length; m++) {
   check('opponent got the point', match.scores[1] >= 1, `scores=${match.scores}`);
 }
 
-// 6. first to 5 wins
+// 7. first to 5 wins
 {
   const match = new Match();
   let guard = 0;
@@ -107,7 +132,7 @@ for (let m = 0; m < MAPS.length; m++) {
     `winner=${match.winner} scores=${match.scores}`);
 }
 
-// 7. snapshot size sanity for networking
+// 8. snapshot size sanity for networking
 {
   const match = new Match();
   for (let i = 0; i < 120; i++) match.step();
