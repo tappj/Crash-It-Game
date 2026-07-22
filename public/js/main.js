@@ -3,6 +3,7 @@
   const canvas = document.getElementById('game');
   const renderer = new CrashRender.Renderer(canvas);
   const net = new CrashNet.Net();
+  const SNAPSHOT_TICKS = 3; // 60 Hz simulation / 3 = 20 Hz network stream
 
   const app = {
     mode: 'menu',        // menu | local | host | guest
@@ -131,7 +132,7 @@
     if (app.mode === 'host' && app.match) app.match.setInput(1, { l: m.l, r: m.r });
   });
   net.on('s', (m) => {          // host snapshot -> guest
-    if (app.mode === 'guest' && app.snapBuf) app.snapBuf.push(m.s);
+    if (app.mode === 'guest' && app.snapBuf) app.snapBuf.push(CrashNet.unpackSnapshot(m.s));
   });
   net.on('rematch', () => {
     if (app.mode === 'host') {
@@ -165,8 +166,8 @@
         app.match.step(1 / 60);
         app.acc -= 1 / 60;
         app.tick++;
-        if (app.mode === 'host' && app.tick % 2 === 0) {
-          net.send({ t: 's', s: app.match.snapshot() });
+        if (app.mode === 'host' && app.tick % SNAPSHOT_TICKS === 0) {
+          net.send({ t: 's', s: app.match.networkSnapshot() });
         }
         if (!wasOver && app.match.phase === 'over') showGameOver(app.match.snapshot());
         steps++;

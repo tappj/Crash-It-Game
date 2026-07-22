@@ -7,13 +7,38 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 3000;
 
 const app = express();
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: '1h',
+  setHeaders(res, filePath) {
+    // Revalidate executable game files on each page load. The browser retains
+    // its cached copy and receives a tiny 304 response when unchanged, while a
+    // deployment cannot leave an old client speaking a new server protocol.
+    if (/\.(?:html|css|js)$/i.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
+    else res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+  },
+}));
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  maxPayload: 8 * 1024,
+  // Browser-supported compression cuts the compact snapshot traffic further.
+  // No context takeover prevents an idle connection from retaining a growing
+  // compression dictionary in server memory.
+  perMessageDeflate: {
+    threshold: 64,
+    concurrencyLimit: 4,
+    serverNoContextTakeover: true,
+    clientNoContextTakeover: true,
+    zlibDeflateOptions: { level: 3 },
+  },
+});
 
 // code -> { host: ws, guest: ws|null }
 const lobbies = new Map();
+const MAX_LOBBIES = 500;
+const LOBBY_WAIT_MS = 15 * 60 * 1000;
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 function makeCode() {
@@ -61,8 +86,12 @@ wss.on('connection', (ws) => {
     switch (msg.t) {
       case 'create': {
         leaveLobby(ws, true);
+        if (lobbies.size >= MAX_LOBBIES) {
+          send(ws, { t: 'err', msg: 'The lobby server is busy. Please try again shortly.' });
+          return;
+        }
         const code = makeCode();
-        lobbies.set(code, { host: ws, guest: null });
+        lobbies.set(code, { host: ws, guest: null, createdAt: Date.now() });
         ws.lobbyCode = code;
         send(ws, { t: 'created', code });
         break;
@@ -96,12 +125,24 @@ wss.on('connection', (ws) => {
 
 // drop dead connections
 const interval = setInterval(() => {
+  const now = Date.now();
+  for (const [code, lobby] of lobbies) {
+    // A waiting code has no game state and should not live forever if its
+    // creator abandons a browser tab without disconnecting.
+    if (!lobby.guest && now - lobby.createdAt >= LOBBY_WAIT_MS) {
+      lobbies.delete(code);
+      if (lobby.host) {
+        lobby.host.lobbyCode = null;
+        send(lobby.host, { t: 'err', msg: 'Lobby expired. Create a new code to continue.' });
+      }
+    }
+  }
   wss.clients.forEach((ws) => {
     if (!ws.isAlive) { leaveLobby(ws, true); return ws.terminate(); }
     ws.isAlive = false;
     ws.ping();
   });
-}, 15000);
+}, 30000);
 wss.on('close', () => clearInterval(interval));
 
 server.listen(PORT, '0.0.0.0', () => {

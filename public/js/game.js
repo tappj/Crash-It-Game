@@ -332,6 +332,25 @@
         events: this.events.slice(),
       };
     }
+
+    // Compact form for the 20 Hz online stream. Array positions are stable
+    // protocol fields; the browser expands them before rendering.
+    networkSnapshot() {
+      const s = this.snapshot();
+      return [
+        s.mid, s.map, s.phase, s.phaseT, s.water, s.scores[0], s.scores[1],
+        s.winner == null ? -1 : s.winner, s.shield,
+        s.cars.map((c) => [
+          c.x, c.y, c.a, c.hx, c.hy, c.alive ? 1 : 0, c.dir, c.drive, c.sp,
+          c.wheels[0].x, c.wheels[0].y, c.wheels[0].a,
+          c.wheels[1].x, c.wheels[1].y, c.wheels[1].a,
+        ]),
+        s.planks.map((p) => [p.x, p.y, p.a]),
+        s.events.map((e) => e.type === 'die'
+          ? [e.id, 0, e.car, e.x, e.y]
+          : e.type === 'rise' ? [e.id, 1] : [e.id, 2, e.car]),
+      ];
+    }
   }
 
   return { Match, CFG, W, H, MAPS };

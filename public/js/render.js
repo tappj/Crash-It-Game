@@ -311,23 +311,28 @@
 
   // ---------- particles ----------
   class Particles {
-    constructor() { this.list = []; }
+    constructor() { this.list = []; this.max = 240; }
+    add(p) {
+      // Effects must never become an unbounded allocation source during a
+      // long match on a low-memory phone.
+      if (this.list.length < this.max) this.list.push(p);
+    }
     smoke(x, y) {
-      this.list.push({ kind: 'smoke', x, y, vx: (Math.random() - 0.5) * 0.6, vy: -0.4 - Math.random() * 0.5, r: 5 + Math.random() * 6, life: 1, decay: 0.02 });
+      this.add({ kind: 'smoke', x, y, vx: (Math.random() - 0.5) * 0.6, vy: -0.4 - Math.random() * 0.5, r: 5 + Math.random() * 6, life: 1, decay: 0.02 });
     }
     burst(x, y, color) {
       for (let i = 0; i < 14; i++) {
         const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 5;
-        this.list.push({ kind: 'star', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, r: 5 + Math.random() * 7, life: 1, decay: 0.016, color, rot: Math.random() * 6 });
+        this.add({ kind: 'star', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, r: 5 + Math.random() * 7, life: 1, decay: 0.016, color, rot: Math.random() * 6 });
       }
       for (let i = 0; i < 10; i++) {
         const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 3;
-        this.list.push({ kind: 'smoke', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1, r: 8 + Math.random() * 10, life: 1, decay: 0.018 });
+        this.add({ kind: 'smoke', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1, r: 8 + Math.random() * 10, life: 1, decay: 0.018 });
       }
     }
     splash(x, y) {
       for (let i = 0; i < 12; i++) {
-        this.list.push({ kind: 'drop', x, y, vx: (Math.random() - 0.5) * 7, vy: -3 - Math.random() * 5, r: 3 + Math.random() * 4, life: 1, decay: 0.02 });
+        this.add({ kind: 'drop', x, y, vx: (Math.random() - 0.5) * 7, vy: -3 - Math.random() * 5, r: 3 + Math.random() * 4, life: 1, decay: 0.02 });
       }
     }
     step(dt) {

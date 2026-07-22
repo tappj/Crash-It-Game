@@ -112,7 +112,10 @@ for (let m = 0; m < MAPS.length; m++) {
   const match = new Match();
   for (let i = 0; i < 120; i++) match.step();
   const size = JSON.stringify({ t: 's', s: match.snapshot() }).length;
+  const compactSize = JSON.stringify({ t: 's', s: match.networkSnapshot() }).length;
   check('snapshot < 2KB', size < 2048, `${size} bytes`);
+  check('compact network snapshot saves at least 35%', compactSize < size * 0.65,
+    `${compactSize} bytes vs ${size} bytes`);
 }
 
 console.log(failures === 0 ? '\nALL TESTS PASSED' : `\n${failures} FAILURES`);

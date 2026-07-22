@@ -39,10 +39,35 @@
     leaveLobby() { this.send({ t: 'leave' }); }
   }
 
+  // The host sends snapshots frequently, so keep their wire representation
+  // compact. Local rendering continues to use descriptive object fields.
+  // This removes repeated JSON keys from every network frame.
+  function unpackSnapshot(packed) {
+    if (!Array.isArray(packed)) return packed; // supports older servers during a rolling deploy
+    const [mid, map, phase, phaseT, water, score0, score1, winner, shield, cars, planks, events] = packed;
+    return {
+      mid, map, phase, phaseT, water,
+      scores: [score0, score1],
+      winner: winner < 0 ? null : winner,
+      shield,
+      cars: cars.map((c) => ({
+        x: c[0], y: c[1], a: c[2], hx: c[3], hy: c[4], alive: !!c[5],
+        dir: c[6], drive: c[7], sp: c[8],
+        wheels: [{ x: c[9], y: c[10], a: c[11] }, { x: c[12], y: c[13], a: c[14] }],
+      })),
+      planks: planks.map((p) => ({ x: p[0], y: p[1], a: p[2] })),
+      events: events.map((e) => {
+        if (e[1] === 0) return { id: e[0], type: 'die', car: e[2], x: e[3], y: e[4] };
+        if (e[1] === 1) return { id: e[0], type: 'rise' };
+        return { id: e[0], type: 'win', car: e[2] };
+      }),
+    };
+  }
+
   // Interpolating snapshot buffer for the guest: renders ~100ms in the past
   // so motion is smooth between 30Hz snapshots.
   class SnapshotBuffer {
-    constructor() { this.buf = []; this.delay = 100; }
+    constructor() { this.buf = []; this.delay = 125; }
     push(state) {
       state._t = performance.now();
       this.buf.push(state);
@@ -76,7 +101,7 @@
   function lerpState(a, b, k) {
     // interpolate only between snapshots of the same round/map
     if (a.map !== b.map || a.mid !== b.mid || a.phase !== b.phase && b.phase === 'ready') return b;
-    const s = JSON.parse(JSON.stringify(b));
+    const s = { ...b };
     s.water = lerp(a.water, b.water, k);
     s.cars = b.cars.map((cb, i) => {
       const ca = a.cars[i];
@@ -99,5 +124,5 @@
     return s;
   }
 
-  window.CrashNet = { Net, SnapshotBuffer };
+  window.CrashNet = { Net, SnapshotBuffer, unpackSnapshot };
 })();
