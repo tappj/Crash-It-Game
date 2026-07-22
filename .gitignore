@@ -1,0 +1,4 @@
+# Keep the repository focused on the reorganized project directory.
+/*
+!/.gitignore
+!/crash-it/
